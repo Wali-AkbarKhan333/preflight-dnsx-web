@@ -1,0 +1,8 @@
+google.com
+microsoft.com
+openai.com
+github.com
+example.com
+john@google.com
+https://www.microsoft.com/en-us/
+this-domain-probably-does-not-exist-928374.com

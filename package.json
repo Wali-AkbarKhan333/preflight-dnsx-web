@@ -1,0 +1,15 @@
+{
+  "name": "dnsx-web-preflight",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zero-dependency web UI and API wrapper around ProjectDiscovery dnsx for DNS/MX preflight checks.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

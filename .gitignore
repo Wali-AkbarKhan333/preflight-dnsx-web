@@ -1,0 +1,9 @@
+node_modules/
+.env
+data/jobs/*
+!data/jobs/.gitkeep
+tools/dnsx
+tools/dnsx.exe
+tools/*.zip
+npm-debug.log*
+.DS_Store

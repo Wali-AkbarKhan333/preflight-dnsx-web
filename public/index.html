@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MX Preflight</title>
+  <meta name="description" content="Bulk DNS and MX preflight checks powered by ProjectDiscovery dnsx." />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <div class="brand-row">
+          <div class="brand-mark">MX</div>
+          <div>
+            <h1>MX Preflight</h1>
+            <p>Domain & mail-infrastructure filtering before deeper email verification.</p>
+          </div>
+        </div>
+      </div>
+      <div id="engineStatus" class="status-pill neutral">Checking dnsx…</div>
+    </header>
+
+    <main>
+      <section class="grid two-col">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">NEW SCAN</span>
+              <h2>Upload a lead list</h2>
+            </div>
+            <div class="small muted">TXT or CSV · domains or email addresses</div>
+          </div>
+
+          <div class="tabs" role="tablist">
+            <button class="tab active" data-tab="upload">Upload file</button>
+            <button class="tab" data-tab="paste">Paste input</button>
+          </div>
+
+          <form id="scanForm">
+            <div id="uploadPane" class="tab-pane active">
+              <label id="dropzone" class="dropzone">
+                <input id="fileInput" type="file" name="file" accept=".txt,.csv,text/plain,text/csv" hidden />
+                <div class="drop-icon">↑</div>
+                <strong>Drop a TXT/CSV here or choose a file</strong>
+                <span id="fileLabel">The app extracts domains from domains, URLs, and email addresses.</span>
+              </label>
+            </div>
+
+            <div id="pastePane" class="tab-pane">
+              <textarea id="pasteInput" name="text" rows="10" placeholder="john@company.com\ncompany2.com\nhttps://company3.com/about"></textarea>
+            </div>
+
+            <details class="settings">
+              <summary>Scan settings</summary>
+              <div class="settings-grid">
+                <label>Threads<input id="threads" type="number" value="100" min="1" max="300" /></label>
+                <label>DNS requests / sec<input id="rateLimit" type="number" value="1000" min="1" max="5000" /></label>
+              </div>
+            </details>
+
+            <div class="callout">
+              <strong>What this checks</strong>
+              <span>DNS resolution, A/AAAA, NS, MX, null-MX and common mail-provider identification. It does not prove that a specific mailbox exists.</span>
+            </div>
+
+            <button id="startBtn" class="primary-btn" type="submit">Start DNS / MX scan</button>
+            <div id="formError" class="error-text" hidden></div>
+          </form>
+        </div>
+
+        <div class="panel side-panel">
+          <span class="eyebrow">OUTBOUND WORKFLOW</span>
+          <h2>Use this as the cheap first filter</h2>
+          <div class="flow">
+            <div class="flow-step"><span>1</span><div><strong>Raw lead list</strong><small>Domains and emails</small></div></div>
+            <div class="flow-line"></div>
+            <div class="flow-step current"><span>2</span><div><strong>DNS + MX preflight</strong><small>Powered by dnsx</small></div></div>
+            <div class="flow-line"></div>
+            <div class="flow-step"><span>3</span><div><strong>Mailbox verification</strong><small>Only for remaining candidates</small></div></div>
+            <div class="flow-line"></div>
+            <div class="flow-step"><span>4</span><div><strong>Outbound</strong><small>Use cleaned, consent/compliance-appropriate data</small></div></div>
+          </div>
+          <div class="note-box">
+            <strong>NO_MX is not the same as invalid.</strong>
+            <p>SMTP permits an implicit A/AAAA fallback when no MX record exists. These records are placed in the review export instead of being automatically discarded.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="jobSection" class="panel job-panel" hidden>
+        <div class="panel-head">
+          <div>
+            <span class="eyebrow">CURRENT JOB</span>
+            <h2 id="jobTitle">Processing</h2>
+          </div>
+          <button id="deleteJobBtn" class="ghost-btn danger" hidden>Delete job</button>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-meta"><span id="jobStage">Queued</span><span id="jobProgress">0%</span></div>
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+          <div id="jobError" class="error-box" hidden></div>
+        </div>
+
+        <div id="summaryGrid" class="summary-grid" hidden>
+          <div class="metric"><span>Total domains</span><strong id="mTotal">0</strong></div>
+          <div class="metric good"><span>Mail enabled</span><strong id="mMail">0</strong></div>
+          <div class="metric"><span>No MX</span><strong id="mNoMx">0</strong></div>
+          <div class="metric bad"><span>Null MX</span><strong id="mNullMx">0</strong></div>
+          <div class="metric bad"><span>DNS failed</span><strong id="mFailed">0</strong></div>
+          <div class="metric"><span>Unknown</span><strong id="mUnknown">0</strong></div>
+        </div>
+
+        <div id="downloads" class="downloads" hidden></div>
+
+        <div id="previewWrap" class="table-wrap" hidden>
+          <div class="table-head"><strong>Domain preview</strong><span class="muted small">First 200 unique domains</span></div>
+          <table>
+            <thead><tr><th>Domain</th><th>DNS</th><th>Mail</th><th>Provider</th><th>MX</th><th>Action</th></tr></thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel recent-panel">
+        <div class="panel-head">
+          <div><span class="eyebrow">HISTORY</span><h2>Recent jobs</h2></div>
+          <button id="refreshJobs" class="ghost-btn">Refresh</button>
+        </div>
+        <div id="recentJobs" class="recent-list"><div class="empty">No jobs yet.</div></div>
+      </section>
+    </main>
+
+    <footer>
+      <span>MX Preflight is a wrapper around ProjectDiscovery dnsx. dnsx remains a separate open-source project.</span>
+      <span>Result files are automatically eligible for cleanup after the configured retention period.</span>
+    </footer>
+  </div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
