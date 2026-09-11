@@ -1,8 +1,8 @@
-# MX Preflight v2 — Private dnsx Web UI
+# MX Preflight v2.1 — Private dnsx Web UI
 
 MX Preflight is a private multi-user web application around [ProjectDiscovery dnsx](https://github.com/projectdiscovery/dnsx) for bulk DNS/MX preflight checks before deeper email verification.
 
-Version 2 adds **SQLite-backed user accounts, login sessions, per-user scan history, admin user management, password controls, and persistent historical metadata**.
+Version 2.1 adds **live progress for large scans, large-file-safe input parsing**, plus the SQLite-backed accounts and per-user history introduced in v2.
 
 It does **not** verify whether a specific mailbox exists and it does not send email.
 
@@ -33,6 +33,10 @@ It does **not** verify whether a specific mailbox exists and it does not send em
 - Result files can expire without deleting the historical scan record from SQLite.
 
 ### DNS/MX preflight
+
+- Live chunk-level progress during large scans.
+- Live stage count, domains/second, elapsed time, ETA, and progressive result counters.
+- Large CSV input parsing avoids JavaScript call-stack overflow.
 
 - TXT/CSV upload or pasted input.
 - Domains, URLs, and email addresses are accepted.
@@ -195,6 +199,7 @@ DEFAULT_THREADS=100
 DEFAULT_RATE_LIMIT=1000
 MAX_THREADS=300
 MAX_RATE_LIMIT=5000
+SCAN_CHUNK_SIZE=5000
 ```
 
 ### Result-file retention versus history
@@ -252,7 +257,7 @@ For a simple backup, stop the app briefly and copy the `data/` directory. A prod
 npm test
 ```
 
-The test suite covers input normalization, DNS/MX classification, password/session handling, admin safety, and per-user job-history isolation.
+The test suite covers input normalization, large CSV parsing, progressive chunked scanning, DNS/MX classification, password/session handling, admin safety, and per-user job-history isolation.
 
 ## Updating a deployed server from GitHub
 
@@ -269,3 +274,7 @@ The SQLite database and job files remain under `data/` and are ignored by Git, s
 ## Third-party software
 
 `dnsx` is developed by ProjectDiscovery and remains a separate open-source project. The dnsx binary is not bundled in this ZIP; setup/Docker scripts download the official release. Review ProjectDiscovery's license and documentation before redistribution or commercial use.
+
+### Scan queue (v2.3)
+
+Scans are serialized by default: only one job uses dnsx at a time. New jobs are queued and automatically start when the active scan completes or is canceled. This prevents several large lists from splitting the available DNS/network throughput. Keep `MAX_CONCURRENT_SCANS=1` on a small/free VM. Running and queued jobs can be canceled from the dashboard.

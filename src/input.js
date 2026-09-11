@@ -45,16 +45,31 @@ export function normalizeCandidate(value) {
   };
 }
 
-function candidatesFromText(text) {
-  return String(text ?? '')
-    .split(/[\r\n\t,; ]+/)
-    .map((x) => x.trim())
-    .filter(Boolean);
+// Yield tokens one-by-one instead of building another large array in memory.
+function* candidatesFromText(text) {
+  const source = String(text ?? '');
+  let token = '';
+  const flush = function* () {
+    const value = token.trim();
+    token = '';
+    if (value) yield value;
+  };
+
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    if (ch === '\r' || ch === '\n' || ch === '\t' || ch === ',' || ch === ';' || ch === ' ') {
+      yield* flush();
+      if (ch === '\r' && source[i + 1] === '\n') i += 1;
+    } else {
+      token += ch;
+    }
+  }
+  yield* flush();
 }
 
-// Small RFC-4180-style CSV cell reader. We only need cell values, not column names.
-function candidatesFromCsv(text) {
-  const cells = [];
+// Small RFC-4180-style CSV cell reader. Values are yielded incrementally so
+// large CSVs do not create a huge temporary argument/array allocation.
+function* candidatesFromCsv(text) {
   let cell = '';
   let quoted = false;
   const source = String(text ?? '').replace(/^\uFEFF/, '');
@@ -76,42 +91,54 @@ function candidatesFromCsv(text) {
     if (ch === '"') {
       quoted = true;
     } else if (ch === ',' || ch === '\n' || ch === '\r') {
-      if (cell.trim()) cells.push(cell.trim());
+      const value = cell.trim();
+      if (value) yield value;
       cell = '';
       if (ch === '\r' && source[i + 1] === '\n') i += 1;
     } else {
       cell += ch;
     }
   }
-  if (cell.trim()) cells.push(cell.trim());
-  return cells;
+
+  const value = cell.trim();
+  if (value) yield value;
 }
 
 export function parseInput({ fileText = '', filename = '', pastedText = '' } = {}) {
-  const values = [];
+  const records = [];
+  const uniqueDomainSet = new Set();
+  let rawValues = 0;
+  let rejectedValues = 0;
+
+  const consume = (iterable) => {
+    for (const value of iterable) {
+      rawValues += 1;
+      const normalized = normalizeCandidate(value);
+      if (!normalized) {
+        rejectedValues += 1;
+        continue;
+      }
+      records.push(normalized);
+      uniqueDomainSet.add(normalized.domain);
+    }
+  };
 
   if (fileText) {
     const isCsv = filename.toLowerCase().endsWith('.csv');
-    values.push(...(isCsv ? candidatesFromCsv(fileText) : candidatesFromText(fileText)));
+    consume(isCsv ? candidatesFromCsv(fileText) : candidatesFromText(fileText));
   }
 
-  if (pastedText) values.push(...candidatesFromText(pastedText));
+  if (pastedText) consume(candidatesFromText(pastedText));
 
-  const records = [];
-  for (const value of values) {
-    const normalized = normalizeCandidate(value);
-    if (normalized) records.push(normalized);
-  }
-
-  const uniqueDomains = [...new Set(records.map((r) => r.domain))];
+  const uniqueDomains = Array.from(uniqueDomainSet);
 
   return {
     records,
     uniqueDomains,
     stats: {
-      rawValues: values.length,
+      rawValues,
       acceptedRecords: records.length,
-      rejectedValues: Math.max(0, values.length - records.length),
+      rejectedValues,
       uniqueDomains: uniqueDomains.length
     }
   };

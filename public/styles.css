@@ -156,3 +156,22 @@ input[type="text"]:focus, input[type="password"]:focus, select:focus { border-co
   .account-grid { grid-template-columns:1fr; }
   .compact-form { grid-template-columns:1fr; }
 }
+
+/* v2.1 live scan progress */
+.live-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin:-4px 0 14px; }
+.live-stat { background:#09131c; border:1px solid var(--border); border-radius:10px; padding:10px 11px; }
+.live-stat span { display:block; color:var(--muted); font-size:10px; margin-bottom:4px; }
+.live-stat strong { font-size:13px; color:#dce7ef; }
+.account-grid.single-panel { grid-template-columns:1fr; }
+@media (max-width: 800px) { .live-stats { grid-template-columns:repeat(2,1fr); } }
+@media (max-width: 480px) { .live-stats { grid-template-columns:1fr; } }
+
+/* v2.3 serial scan queue + cancellation */
+.job-actions, .recent-actions { display:flex; align-items:center; gap:8px; }
+.recent-actions button { border:0; background:transparent; color:var(--accent-2); padding:3px; font-size:11px; }
+.recent-actions .danger-text { color:#fda4af; }
+.ghost-btn:disabled, .recent-actions button:disabled { opacity:.45; cursor:not-allowed; }
+@media (max-width: 650px) {
+  .recent-item { grid-template-columns:minmax(0,1fr) auto; }
+  .recent-actions { grid-column:1/-1; justify-content:flex-end; }
+}

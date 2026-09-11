@@ -7,6 +7,7 @@ import { parseInput } from './src/input.js';
 import { JobStore } from './src/store.js';
 import { AppDatabase } from './src/db.js';
 import { locateDnsx, runScan } from './src/scanner.js';
+import { ScanQueue } from './src/scan-queue.js';
 import {
   hashPassword,
   verifyPassword,
@@ -52,6 +53,13 @@ const store = new JobStore(path.join(dataDir, 'jobs'), db);
 await store.init();
 db.cleanupSessions();
 await store.cleanupResultFiles(resultRetentionHours).catch(() => {});
+
+const scanQueue = new ScanQueue({
+  store,
+  runner: runScan,
+  concurrency: Number(process.env.MAX_CONCURRENT_SCANS || 1)
+});
+await scanQueue.recover(await store.list(500));
 
 const mime = {
   '.html': 'text/html; charset=utf-8',
@@ -375,10 +383,11 @@ const server = http.createServer(async (req, res) => {
         dnsxInstalled: Boolean(dnsx),
         dnsx: dnsx ? { path: dnsx.path, version: dnsx.versionOutput.split(/\r?\n/).filter(Boolean).slice(-1)[0] } : null,
         database: { type: 'SQLite', file: 'data/app.db' },
+        scanQueue: scanQueue.snapshot(),
         limits: {
           maxUploadMb,
-          maxThreads: Number(process.env.MAX_THREADS || 300),
-          maxRateLimit: Number(process.env.MAX_RATE_LIMIT || 5000)
+          maxThreads: Number(process.env.MAX_THREADS || 500),
+          maxRateLimit: Number(process.env.MAX_RATE_LIMIT || 10000)
         }
       });
     }
@@ -393,8 +402,8 @@ const server = http.createServer(async (req, res) => {
       if (!parsed.uniqueDomains.length) return sendJson(req, res, 400, { error: 'No valid domains or email addresses were found in the input.' });
 
       const settings = {
-        threads: Number(body.threads || process.env.DEFAULT_THREADS || 100),
-        rateLimit: Number(body.rateLimit || process.env.DEFAULT_RATE_LIMIT || 1000)
+        threads: Number(body.threads || process.env.DEFAULT_THREADS || 200),
+        rateLimit: Number(body.rateLimit || process.env.DEFAULT_RATE_LIMIT || 2000)
       };
       const job = await store.create({
         userId: auth.user.id,
@@ -405,14 +414,17 @@ const server = http.createServer(async (req, res) => {
         settings
       });
 
-      setImmediate(async () => {
-        try {
-          await runScan(job, store);
-        } catch (error) {
-          await store.update(job.id, { status: 'failed', stage: 'Failed', progress: 100, error: error?.message || String(error) }).catch(() => {});
-        }
-      });
-      return sendJson(req, res, 202, { job });
+      const queuedJob = await scanQueue.enqueue(job.id);
+      return sendJson(req, res, 202, { job: queuedJob });
+    }
+
+    const cancelMatch = pathname.match(/^\/api\/jobs\/([0-9a-f-]+)\/cancel$/i);
+    if (cancelMatch && req.method === 'POST') {
+      const job = await store.get(cancelMatch[1]);
+      if (!canAccessJob(auth, job)) return sendJson(req, res, job ? 403 : 404, { error: job ? 'Access denied.' : 'Job not found.' });
+      if (!['queued', 'running'].includes(job.status)) return sendJson(req, res, 409, { error: 'Only queued or running jobs can be canceled.' });
+      const updated = await scanQueue.cancel(job.id);
+      return sendJson(req, res, 202, { job: updated });
     }
 
     const jobMatch = pathname.match(/^\/api\/jobs\/([0-9a-f-]+)$/i);
@@ -508,7 +520,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`MX Preflight v2 running at http://localhost:${port}`);
+  console.log(`MX Preflight v2.3 running at http://localhost:${port}`);
+  console.log(`Scan queue concurrency: ${scanQueue.concurrency}`);
   console.log(`Database: ${path.join(dataDir, 'app.db')}`);
   if (db.userCount() === 0) console.log('Initial setup required: open /setup or set ADMIN_USERNAME and ADMIN_PASSWORD before starting.');
   const dnsx = locateDnsx();

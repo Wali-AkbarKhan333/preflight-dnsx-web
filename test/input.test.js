@@ -14,3 +14,12 @@ test('deduplicates domains while preserving source records', () => {
   assert.equal(out.records.length, 3);
   assert.deepEqual(out.uniqueDomains.sort(), ['example.com', 'openai.com']);
 });
+
+test('parses a large CSV without overflowing the JavaScript call stack', () => {
+  const rows = ['email'];
+  for (let i = 0; i < 120000; i += 1) rows.push(`person${i}@company${i}.com`);
+  const out = parseInput({ fileText: rows.join('\n'), filename: 'large.csv' });
+  assert.equal(out.records.length, 120000);
+  assert.equal(out.uniqueDomains.length, 120000);
+  assert.equal(out.stats.rejectedValues, 1); // header cell is not a domain/email
+});

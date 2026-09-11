@@ -1,8 +1,8 @@
 {
   "name": "dnsx-web-preflight",
-  "version": "2.0.0",
+  "version": "2.3.0",
   "private": true,
-  "description": "Private multi-user web UI and API wrapper around ProjectDiscovery dnsx with SQLite-backed accounts and scan history.",
+  "description": "Private multi-user DNS/MX preflight UI using dnsx, SQLite scan history, a single-worker scan queue, cancellation, and live progress.",
   "type": "module",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",

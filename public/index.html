@@ -54,14 +54,12 @@
             <details class="settings">
               <summary>Scan settings</summary>
               <div class="settings-grid">
-                <label>Threads<input id="threads" type="number" value="100" min="1" max="300" /></label>
-                <label>DNS requests / sec<input id="rateLimit" type="number" value="1000" min="1" max="5000" /></label>
+                <label>Threads<input id="threads" type="number" value="200" min="1" max="500" /></label>
+                <label>DNS requests / sec<input id="rateLimit" type="number" value="2000" min="1" max="10000" /></label>
               </div>
             </details>
 
-          
-
-            <button id="startBtn" class="primary-btn" type="submit">Start DNS / MX scan</button>
+            <button id="startBtn" class="primary-btn" type="submit">Start fast MX scan</button>
             <div id="formError" class="error-text" hidden></div>
           </form>
         </div>
@@ -78,20 +76,26 @@
             <div class="flow-line"></div>
             <div class="flow-step"><span>4</span><div><strong>Outbound</strong><small>Use cleaned, compliance-appropriate data</small></div></div>
           </div>
-         
         </div>
       </section>
 
       <section id="jobSection" class="panel job-panel" hidden>
         <div class="panel-head">
           <div><span class="eyebrow">CURRENT JOB</span><h2 id="jobTitle">Processing</h2><div id="jobOwner" class="small muted"></div></div>
-          <button id="deleteJobBtn" class="ghost-btn danger" hidden>Delete job</button>
+          <div class="job-actions"><button id="cancelJobBtn" class="ghost-btn danger" hidden>Cancel scan</button><button id="deleteJobBtn" class="ghost-btn danger" hidden>Delete job</button></div>
         </div>
 
         <div class="progress-wrap">
           <div class="progress-meta"><span id="jobStage">Queued</span><span id="jobProgress">0%</span></div>
           <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
           <div id="jobError" class="error-box" hidden></div>
+        </div>
+
+        <div id="liveStats" class="live-stats" hidden>
+          <div class="live-stat"><span>Stage processed</span><strong id="liveProcessed">0 / 0</strong></div>
+          <div class="live-stat"><span>Current rate</span><strong id="liveRate">0 domains/s</strong></div>
+          <div class="live-stat"><span>Elapsed</span><strong id="liveElapsed">0s</strong></div>
+          <div class="live-stat"><span>Estimated remaining</span><strong id="liveEta">—</strong></div>
         </div>
 
         <div id="summaryGrid" class="summary-grid" hidden>
@@ -123,7 +127,7 @@
         <div id="recentJobs" class="recent-list"><div class="empty">No jobs yet.</div></div>
       </section>
 
-      <section class="grid account-grid">
+      <section class="grid account-grid single-panel">
         <div class="panel">
           <div class="panel-head"><div><span class="eyebrow">ACCOUNT</span><h2>Change password</h2></div></div>
           <form id="passwordForm" class="compact-form">
@@ -135,7 +139,6 @@
           </form>
         </div>
 
-        
       </section>
 
       <section id="adminPanel" class="panel admin-panel" hidden>
