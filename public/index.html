@@ -59,10 +59,7 @@
               </div>
             </details>
 
-            <div class="callout">
-              <strong>What this checks</strong>
-              <span>DNS resolution, A/AAAA, NS, MX, null-MX and common mail-provider identification. It does not prove that a specific mailbox exists.</span>
-            </div>
+          
 
             <button id="startBtn" class="primary-btn" type="submit">Start DNS / MX scan</button>
             <div id="formError" class="error-text" hidden></div>
@@ -81,10 +78,7 @@
             <div class="flow-line"></div>
             <div class="flow-step"><span>4</span><div><strong>Outbound</strong><small>Use cleaned, compliance-appropriate data</small></div></div>
           </div>
-          <div class="note-box">
-            <strong>NO_MX is not the same as invalid.</strong>
-            <p>SMTP permits an implicit A/AAAA fallback when no MX record exists. These records are placed in the review export instead of being automatically discarded.</p>
-          </div>
+         
         </div>
       </section>
 
@@ -141,11 +135,7 @@
           </form>
         </div>
 
-        <div class="panel privacy-panel">
-          <span class="eyebrow">PRIVATE STORAGE</span>
-          <h2>User-isolated history</h2>
-          <p>Accounts and scan metadata are stored in local SQLite. Uploaded/result files remain on the server filesystem and are separated by job. Normal users can only access their own jobs; administrators can manage users and inspect histories.</p>
-        </div>
+        
       </section>
 
       <section id="adminPanel" class="panel admin-panel" hidden>
