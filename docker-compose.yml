@@ -10,14 +10,16 @@ services:
       PORT: "3000"
       HOST: "0.0.0.0"
       DNSX_PATH: "/app/tools/dnsx"
-      APP_USERNAME: "${APP_USERNAME:-admin}"
-      APP_PASSWORD: "${APP_PASSWORD:-}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      SESSION_DAYS: "${SESSION_DAYS:-14}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-auto}"
       MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-25}"
-      JOB_RETENTION_HOURS: "${JOB_RETENTION_HOURS:-24}"
+      RESULT_FILE_RETENTION_HOURS: "${RESULT_FILE_RETENTION_HOURS:-720}"
       DEFAULT_THREADS: "${DEFAULT_THREADS:-100}"
       DEFAULT_RATE_LIMIT: "${DEFAULT_RATE_LIMIT:-1000}"
       MAX_THREADS: "${MAX_THREADS:-300}"
       MAX_RATE_LIMIT: "${MAX_RATE_LIMIT:-5000}"
     volumes:
-      - ./data/jobs:/app/data/jobs
+      - ./data:/app/data
     restart: unless-stopped

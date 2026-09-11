@@ -1,5 +1,8 @@
 node_modules/
 .env
+data/app.db
+data/app.db-shm
+data/app.db-wal
 data/jobs/*
 !data/jobs/.gitkeep
 tools/dnsx

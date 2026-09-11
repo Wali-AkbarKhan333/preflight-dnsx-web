@@ -7,11 +7,15 @@ $Version = if ($env:DNSX_VERSION) { $env:DNSX_VERSION } else { "1.3.1" }
 Write-Host "== MX Preflight Windows setup ==" -ForegroundColor Cyan
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    throw "Node.js 20+ is required. Install Node.js from https://nodejs.org/ and rerun this script."
+    throw "Node.js 22.5+ is required. Install Node.js from https://nodejs.org/ and rerun this script."
 }
 
-$NodeMajor = [int]((node -v).TrimStart('v').Split('.')[0])
-if ($NodeMajor -lt 20) { throw "Node.js 20+ is required. Current: $(node -v)" }
+$NodeParts = (node -v).TrimStart('v').Split('.')
+$NodeMajor = [int]$NodeParts[0]
+$NodeMinor = [int]$NodeParts[1]
+if (($NodeMajor -lt 22) -or (($NodeMajor -eq 22) -and ($NodeMinor -lt 5))) {
+    throw "Node.js 22.5+ is required. Current: $(node -v)"
+}
 
 New-Item -ItemType Directory -Force -Path $ToolsDir | Out-Null
 

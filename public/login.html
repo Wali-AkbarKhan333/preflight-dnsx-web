@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · MX Preflight</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="auth-body">
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="brand-row auth-brand"><div class="brand-mark">MX</div><div><h1>MX Preflight</h1><p>Private access</p></div></div>
+      <div class="auth-copy"><span class="eyebrow">SIGN IN</span><h2>Access your scans</h2><p>Use the account created by the administrator.</p></div>
+      <form id="loginForm" class="auth-form">
+        <label>Username<input id="username" type="text" autocomplete="username" required autofocus /></label>
+        <label>Password<input id="password" type="password" autocomplete="current-password" required /></label>
+        <button id="loginBtn" class="primary-btn" type="submit">Sign in</button>
+        <div id="loginError" class="error-box" hidden></div>
+      </form>
+    </section>
+  </main>
+  <script src="/login.js" defer></script>
+</body>
+</html>

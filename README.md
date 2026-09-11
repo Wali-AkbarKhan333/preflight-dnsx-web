@@ -1,52 +1,88 @@
-# MX Preflight — dnsx Web UI
+# MX Preflight v2 — Private dnsx Web UI
 
-A small web application that wraps [ProjectDiscovery dnsx](https://github.com/projectdiscovery/dnsx) for bulk DNS/MX preflight checks.
+MX Preflight is a private multi-user web application around [ProjectDiscovery dnsx](https://github.com/projectdiscovery/dnsx) for bulk DNS/MX preflight checks before deeper email verification.
 
-It is aimed at the **first, cheap filtering stage** of an email-data / cold-outbound hygiene workflow. It does **not** verify whether an individual mailbox exists and it does not send email.
+Version 2 adds **SQLite-backed user accounts, login sessions, per-user scan history, admin user management, password controls, and persistent historical metadata**.
 
-## What it does
+It does **not** verify whether a specific mailbox exists and it does not send email.
 
-- Accepts TXT or CSV uploads, plus pasted input.
-- Accepts domains, URLs, and email addresses; email addresses are reduced to their domains for DNS scanning.
-- Deduplicates domains before scanning, so a domain is checked once even if many leads use it.
-- Runs dnsx for A, AAAA, NS and MX records.
-- Runs a separate NXDOMAIN pass.
-- Classifies unique domains as:
-  - `MAIL_ENABLED` — one or more normal MX servers were found.
-  - `NULL_MX` — the domain explicitly indicates it does not accept mail.
-  - `NO_MX` — DNS is active but no MX was found. This is **review**, not automatic invalidation, because SMTP allows A/AAAA fallback in some cases.
-  - `DNS_FAILED` — NXDOMAIN was positively identified.
-  - `UNKNOWN` — no confident classification (timeout/other resolution issue).
-- Detects common MX providers such as Google Workspace and Microsoft 365.
-- Produces downloadable CSV files:
-  - `full-results.csv` — every accepted source input mapped back to its domain result.
-  - `domain-results.csv` — one row per unique domain.
-  - `mail-enabled.csv` — inputs whose domains have normal MX records.
-  - `excluded.csv` — null-MX and DNS-failed inputs.
-  - `review.csv` — no-MX and unknown inputs.
-- Stores job files locally and supports automatic cleanup after a configurable retention period.
-- Optional HTTP Basic Authentication for public deployments.
+## v2 features
 
-## Important interpretation
+### Authentication and privacy
 
-This application answers questions such as:
+- First-run admin setup.
+- Optional admin bootstrap from `.env` before the first public start.
+- Username/password login.
+- Passwords are hashed with Node.js `scrypt`; plaintext passwords are never stored.
+- Random server-side sessions stored in SQLite.
+- HttpOnly, SameSite=Strict session cookies.
+- Secure cookie support when deployed behind HTTPS.
+- Login failure rate limiting.
+- User disabling and role management.
+- Protection against disabling/demoting the final active administrator.
+- Users can change their own passwords.
+- Admin password reset invalidates that user's existing sessions.
 
-- Does this domain resolve?
-- Does it publish MX records?
-- Does it explicitly publish null MX?
-- Which mail servers/provider handle the domain?
+### Users and scan history
 
-It **does not** answer:
+- `admin` and `user` roles.
+- Normal users see only their own jobs and result files.
+- Administrators can create users, enable/disable users, change roles, reset passwords, and inspect user histories.
+- Job metadata and scan summaries are persisted in SQLite at `data/app.db`.
+- Result files remain on disk under `data/jobs/<job-id>/`.
+- Result files can expire without deleting the historical scan record from SQLite.
 
-> Does `john@company.com` definitely exist?
+### DNS/MX preflight
 
-Mailbox-level verification requires a separate verification layer and is intentionally outside this project.
+- TXT/CSV upload or pasted input.
+- Domains, URLs, and email addresses are accepted.
+- Domains are deduplicated before scanning.
+- dnsx checks A, AAAA, NS and MX records.
+- Separate NXDOMAIN pass.
+- Common mail-provider detection.
+- Classification:
+  - `MAIL_ENABLED`
+  - `NULL_MX`
+  - `NO_MX`
+  - `DNS_FAILED`
+  - `UNKNOWN`
+- CSV exports:
+  - `full-results.csv`
+  - `domain-results.csv`
+  - `mail-enabled.csv`
+  - `excluded.csv`
+  - `review.csv`
 
-## Windows — quickest start
+## Architecture
 
-Requirements: Windows 10/11, PowerShell, Node.js 20+.
+```text
+Browser
+   |
+   v
+Node.js web/API server
+   |---- SQLite: users, sessions, job history
+   |---- Filesystem: uploaded inputs and result CSVs
+   |
+   v
+dnsx
+   |
+   v
+DNS / MX results and classifications
+```
 
-From the extracted project folder:
+SQLite does not require a separate database service. For a private deployment with a small number of users it adds negligible compute overhead compared with Node.js and dnsx.
+
+## Requirements
+
+- Node.js **22.5 or newer**
+- dnsx v1.3.1 or compatible
+- Windows 10/11 or Linux
+
+The web app itself has no third-party npm runtime dependencies. SQLite uses Node's built-in `node:sqlite` module.
+
+## Windows quick start
+
+From the project folder:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -54,50 +90,59 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\run-local.ps1
 ```
 
-The setup script downloads `dnsx` v1.3.1 from the official ProjectDiscovery GitHub release into `tools\dnsx.exe`, creates `.env` from `.env.example`. The web app itself has no npm dependencies.
-
 Open:
 
 ```text
 http://localhost:3000
 ```
 
-If you already have your own `dnsx.exe`, you can instead copy it to:
+If no users exist, you are redirected to:
+
+```text
+http://localhost:3000/setup
+```
+
+Create the first administrator, then sign in.
+
+If you already have `dnsx.exe`, copy it to:
 
 ```text
 tools\dnsx.exe
 ```
 
-or set `DNSX_PATH` in `.env` to the full executable path.
+or set `DNSX_PATH` in `.env`.
 
 ## Linux / Oracle Cloud VM
 
-Requirements: Node.js 20+, curl and unzip.
+Install Node.js 22+, Git, curl and unzip, then clone the repository.
 
 ```bash
+git clone https://github.com/YOUR-USERNAME/preflight-dnsx-web.git
+cd preflight-dnsx-web
 chmod +x scripts/*.sh
 ./scripts/setup-linux.sh
+```
+
+The setup script downloads the correct official dnsx binary for `amd64` or `arm64`.
+
+### Recommended: bootstrap the first admin before public exposure
+
+Edit `.env`:
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=replace-this-with-a-long-random-password
+```
+
+Then start:
+
+```bash
 ./scripts/run-linux.sh
 ```
 
-Then browse to:
-
-```text
-http://SERVER_IP:3000
-```
-
-Before exposing the service to the Internet, edit `.env` and set a real password:
-
-```env
-APP_USERNAME=admin
-APP_PASSWORD=use-a-long-random-password
-```
-
-Then restart the app.
+After the first admin is created, the environment bootstrap values are ignored because the database is no longer empty. You may remove the plaintext bootstrap password from `.env` afterward and restart the service.
 
 ### Run continuously with systemd
-
-After setup:
 
 ```bash
 sudo ./scripts/install-systemd.sh
@@ -111,62 +156,95 @@ sudo systemctl restart mx-preflight
 journalctl -u mx-preflight -f
 ```
 
-For a production-facing deployment, put Nginx/Caddy/Cloudflare in front of port 3000 and use HTTPS. Do not expose an unprotected instance containing client lead data.
+For a public deployment, put Nginx/Caddy/Cloudflare in front of port 3000, enable HTTPS, and close public access to port 3000 after the reverse proxy is working.
 
 ## Docker
 
-Docker downloads the official dnsx release during image build:
-
 ```bash
 cp .env.example .env
-# Edit .env, especially APP_PASSWORD, before public deployment.
+# Edit .env before first public start.
 docker compose up -d --build
 ```
 
-Open `http://localhost:3000`.
+Persistent application data is mounted through:
+
+```text
+./data:/app/data
+```
+
+This preserves both SQLite and result files across container restarts/rebuilds.
 
 ## Configuration
 
 See `.env.example`.
 
-Key values:
-
 ```env
 PORT=3000
+HOST=0.0.0.0
 DNSX_PATH=
-APP_USERNAME=admin
-APP_PASSWORD=
+
+ADMIN_USERNAME=
+ADMIN_PASSWORD=
+SESSION_DAYS=14
+COOKIE_SECURE=auto
+
 MAX_UPLOAD_MB=25
-JOB_RETENTION_HOURS=24
+RESULT_FILE_RETENTION_HOURS=720
+
 DEFAULT_THREADS=100
 DEFAULT_RATE_LIMIT=1000
 MAX_THREADS=300
 MAX_RATE_LIMIT=5000
 ```
 
-The backend uses `child_process.spawn` with an argument array and does not accept arbitrary command-line flags from the browser.
+### Result-file retention versus history
 
-## Data handling
+`RESULT_FILE_RETENTION_HOURS` controls only the files in `data/jobs/`.
 
-Each scan is stored under:
+For example, with the default `720` hours (30 days):
+
+- scan summary/history remains in SQLite;
+- downloadable CSVs and raw job files are removed after the retention window;
+- the dashboard marks the historical job as having expired files.
+
+Deleting a job manually removes both its database history and result files.
+
+## Database and backups
+
+SQLite files:
 
 ```text
-data/jobs/<job-id>/
+data/app.db
+data/app.db-wal
+data/app.db-shm
 ```
 
-The browser can delete completed jobs. Old completed/failed jobs are also cleaned up on app startup based on `JOB_RETENTION_HOURS`.
+Do not commit them to Git. They are already ignored by `.gitignore`.
 
-No lead data is sent to this application's developer. DNS requests are, by definition, sent to DNS resolvers while dnsx performs its work.
+For a simple backup, stop the app briefly and copy the `data/` directory. A production backup strategy should preserve both `app.db` and any job files that still need to remain downloadable.
 
-## Result recommendations
+## Security notes
+
+- Use HTTPS for Internet-facing access.
+- Do not expose the application without authentication.
+- Keep `.env` out of Git.
+- Use a long unique admin password.
+- Normal users are restricted to their own scan jobs and downloads.
+- Administrators can access all users' scan histories by design.
+- The browser cannot inject arbitrary dnsx command-line arguments; scan arguments are assembled server-side.
+- The app sets restrictive security headers and rejects cross-origin state-changing requests when an Origin header is present.
+
+## What the statuses mean
 
 | Status | Meaning | Default recommendation |
 |---|---|---|
-| MAIL_ENABLED | Normal MX server(s) found | Continue to mailbox-level verification |
-| NULL_MX | Domain explicitly does not accept mail | Exclude |
-| DNS_FAILED | NXDOMAIN identified | Exclude |
-| NO_MX | DNS exists but no MX published | Review; do not automatically call invalid |
-| UNKNOWN | No confident answer | Retry / review |
+| `MAIL_ENABLED` | Normal MX server(s) found | Continue to deeper verification |
+| `NULL_MX` | Domain explicitly says it does not accept mail | Exclude |
+| `DNS_FAILED` | NXDOMAIN identified | Exclude |
+| `NO_MX` | DNS exists but no MX published | Review; do not automatically call invalid |
+| `UNKNOWN` | No confident answer | Retry / review |
+
+`NO_MX` is deliberately not treated as invalid because SMTP can fall back to A/AAAA in some cases.
 
 ## Tests
 
@@ -174,12 +252,20 @@ No lead data is sent to this application's developer. DNS requests are, by defin
 npm test
 ```
 
-The application uses only Node.js built-in modules, so there is no `npm install` step for the web application itself.
+The test suite covers input normalization, DNS/MX classification, password/session handling, admin safety, and per-user job-history isolation.
 
-## Deployment note
+## Updating a deployed server from GitHub
 
-Vercel is not the right host for the scanning backend because this app needs to execute a native `dnsx` binary and run jobs that may exceed a normal serverless request lifecycle. A small Linux VM is the intended deployment target. The frontend and backend are deliberately packaged together for the first version.
+After pushing new code:
+
+```bash
+cd ~/preflight-dnsx-web
+git pull
+sudo systemctl restart mx-preflight
+```
+
+The SQLite database and job files remain under `data/` and are ignored by Git, so normal code updates do not overwrite user accounts or histories.
 
 ## Third-party software
 
-`dnsx` is developed by ProjectDiscovery and is a separate open-source project. The dnsx binary is **not bundled in this ZIP**; the supplied setup/Docker scripts download the official release. Review ProjectDiscovery's license and documentation for dnsx before redistribution or commercial use.
+`dnsx` is developed by ProjectDiscovery and remains a separate open-source project. The dnsx binary is not bundled in this ZIP; setup/Docker scripts download the official release. Review ProjectDiscovery's license and documentation before redistribution or commercial use.

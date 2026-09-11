@@ -3,8 +3,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 export class JobStore {
-  constructor(rootDir) {
+  constructor(rootDir, db) {
     this.rootDir = rootDir;
+    this.db = db;
   }
 
   async init() {
@@ -19,7 +20,7 @@ export class JobStore {
     return path.join(this.dir(id), name);
   }
 
-  async create({ sourceName, records, uniqueDomains, parseStats, settings }) {
+  async create({ userId, sourceName, records, uniqueDomains, parseStats, settings }) {
     const id = crypto.randomUUID();
     const dir = this.dir(id);
     await fs.mkdir(dir, { recursive: true });
@@ -27,6 +28,7 @@ export class JobStore {
     const now = new Date().toISOString();
     const job = {
       id,
+      userId,
       status: 'queued',
       stage: 'Queued',
       progress: 5,
@@ -37,19 +39,22 @@ export class JobStore {
       settings,
       summary: null,
       error: null,
-      downloads: []
+      downloads: [],
+      preview: [],
+      dnsx: null,
+      filesDeleted: false
     };
 
     await fs.writeFile(this.file(id, 'source-records.json'), JSON.stringify(records), 'utf8');
     await fs.writeFile(this.file(id, 'input-domains.txt'), `${uniqueDomains.join('\n')}\n`, 'utf8');
-    await this.save(job);
-    return job;
+    this.db.insertJob(job);
+    return this.get(id);
   }
 
   async save(job) {
     const next = { ...job, updatedAt: new Date().toISOString() };
-    await fs.writeFile(this.file(job.id, 'job.json'), JSON.stringify(next, null, 2), 'utf8');
-    return next;
+    this.db.saveJob(next);
+    return this.get(job.id);
   }
 
   async update(id, patch) {
@@ -59,44 +64,25 @@ export class JobStore {
   }
 
   async get(id) {
-    try {
-      return JSON.parse(await fs.readFile(this.file(id, 'job.json'), 'utf8'));
-    } catch {
-      return null;
-    }
+    return this.db.getJob(id);
   }
 
-  async list(limit = 20) {
-    let entries = [];
-    try {
-      entries = await fs.readdir(this.rootDir, { withFileTypes: true });
-    } catch {
-      return [];
-    }
-
-    const jobs = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const job = await this.get(entry.name);
-      if (job) jobs.push(job);
-    }
-
-    return jobs
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, limit);
+  async list(limit = 20, { userId = null } = {}) {
+    return this.db.listJobs({ userId, limit });
   }
 
   async remove(id) {
     await fs.rm(this.dir(id), { recursive: true, force: true });
+    this.db.deleteJob(id);
   }
 
-  async cleanup(hours) {
-    const cutoff = Date.now() - hours * 60 * 60 * 1000;
-    const jobs = await this.list(5000);
+  async cleanupResultFiles(hours) {
+    if (!Number.isFinite(hours) || hours <= 0) return;
+    const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    const jobs = this.db.listJobsOlderThan(cutoff);
     for (const job of jobs) {
-      if (new Date(job.createdAt).getTime() < cutoff && !['running', 'queued'].includes(job.status)) {
-        await this.remove(job.id);
-      }
+      await fs.rm(this.dir(job.id), { recursive: true, force: true });
+      await this.update(job.id, { filesDeleted: true, downloads: [], preview: job.preview || [] });
     }
   }
 }

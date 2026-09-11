@@ -5,9 +5,14 @@ TOOLS="$PROJECT_ROOT/tools"
 VERSION="${DNSX_VERSION:-1.3.1}"
 
 echo "== MX Preflight Linux setup =="
-command -v node >/dev/null 2>&1 || { echo "Node.js 20+ is required."; exit 1; }
-MAJOR="$(node -v | sed 's/^v//' | cut -d. -f1)"
-[ "$MAJOR" -ge 20 ] || { echo "Node.js 20+ is required. Current: $(node -v)"; exit 1; }
+command -v node >/dev/null 2>&1 || { echo "Node.js 22.5+ is required."; exit 1; }
+NODE_VERSION="$(node -p "process.versions.node")"
+MAJOR="$(printf '%s' "$NODE_VERSION" | cut -d. -f1)"
+MINOR="$(printf '%s' "$NODE_VERSION" | cut -d. -f2)"
+if [ "$MAJOR" -lt 22 ] || { [ "$MAJOR" -eq 22 ] && [ "$MINOR" -lt 5 ]; }; then
+  echo "Node.js 22.5+ is required. Current: $(node -v)"
+  exit 1
+fi
 command -v curl >/dev/null 2>&1 || { echo "curl is required."; exit 1; }
 command -v unzip >/dev/null 2>&1 || { echo "unzip is required."; exit 1; }
 mkdir -p "$TOOLS"

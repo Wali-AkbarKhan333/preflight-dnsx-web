@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Initial setup · MX Preflight</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="auth-body">
+  <main class="auth-shell">
+    <section class="auth-card">
+      <div class="brand-row auth-brand"><div class="brand-mark">MX</div><div><h1>MX Preflight</h1><p>First-run setup</p></div></div>
+      <div class="auth-copy"><span class="eyebrow">INITIAL ADMIN</span><h2>Create the first administrator</h2><p>This page is available only while the database has no users.</p></div>
+      <form id="setupForm" class="auth-form">
+        <label>Admin username<input id="username" type="text" autocomplete="username" required autofocus /></label>
+        <label>Password<input id="password" type="password" autocomplete="new-password" minlength="10" required /></label>
+        <label>Confirm password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="10" required /></label>
+        <button id="setupBtn" class="primary-btn" type="submit">Create administrator</button>
+        <div id="setupError" class="error-box" hidden></div>
+      </form>
+      <div class="note-box"><strong>Deployment note</strong><p>For an Internet-facing deployment, you can also bootstrap the first admin with ADMIN_USERNAME and ADMIN_PASSWORD in .env before starting the service.</p></div>
+    </section>
+  </main>
+  <script src="/setup.js" defer></script>
+</body>
+</html>

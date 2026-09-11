@@ -1,21 +1,42 @@
 const $ = (id) => document.getElementById(id);
-const state = { currentJobId: null, pollTimer: null };
+const state = { currentJobId: null, pollTimer: null, me: null };
 
 const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
-const escapeHtml = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDate = (value) => value ? new Date(value).toLocaleString() : '—';
 
 function badge(value) {
-  const good = ['DNS_ACTIVE', 'MAIL_ENABLED'].includes(value);
-  const bad = ['DNS_FAILED', 'NULL_MX'].includes(value);
+  const good = ['DNS_ACTIVE', 'MAIL_ENABLED', 'completed', 'active'].includes(value);
+  const bad = ['DNS_FAILED', 'NULL_MX', 'failed', 'disabled'].includes(value);
   return `<span class="badge ${good ? 'good' : bad ? 'bad' : ''}">${escapeHtml(value)}</span>`;
 }
 
 async function api(url, options = {}) {
   const res = await fetch(url, options);
+  if (res.status === 401) {
+    location.replace('/login');
+    throw new Error('Authentication required.');
+  }
   const type = res.headers.get('content-type') || '';
   const body = type.includes('application/json') ? await res.json() : await res.text();
   if (!res.ok) throw new Error(body?.error || body || `Request failed (${res.status})`);
   return body;
+}
+
+async function loadMe() {
+  const data = await api('/api/me');
+  state.me = data.user;
+  $('currentUser').textContent = data.user.username;
+  $('currentRole').textContent = data.user.role;
+  if (data.user.role === 'admin') {
+    $('adminPanel').hidden = false;
+    loadUsers();
+  }
+}
+
+async function logout() {
+  try { await api('/api/auth/logout', { method: 'POST' }); } catch {}
+  location.replace('/login');
 }
 
 async function loadHealth() {
@@ -113,6 +134,7 @@ function renderJob(job) {
   state.currentJobId = job.id;
   $('jobSection').hidden = false;
   $('jobTitle').textContent = `${job.sourceName || 'Scan'} · ${job.id.slice(0, 8)}`;
+  $('jobOwner').textContent = state.me?.role === 'admin' && job.ownerUsername ? `Owner: ${job.ownerUsername}` : '';
   $('jobStage').textContent = job.stage || job.status;
   $('jobProgress').textContent = `${job.progress || 0}%`;
   $('progressBar').style.width = `${Math.max(0, Math.min(100, job.progress || 0))}%`;
@@ -120,6 +142,7 @@ function renderJob(job) {
   $('jobError').hidden = !job.error;
   $('jobError').textContent = job.error || '';
   $('deleteJobBtn').hidden = ['queued','running'].includes(job.status);
+  $('expiredFiles').hidden = !job.filesDeleted;
 
   if (job.summary) {
     $('summaryGrid').hidden = false;
@@ -133,7 +156,7 @@ function renderJob(job) {
     $('summaryGrid').hidden = true;
   }
 
-  if (job.downloads?.length) {
+  if (job.downloads?.length && !job.filesDeleted) {
     const pretty = {
       'full-results.csv': 'Full results',
       'domain-results.csv': 'Unique domains',
@@ -172,11 +195,22 @@ async function pollJob() {
       state.pollTimer = setTimeout(pollJob, 1200);
     } else {
       loadJobs();
+      if (state.me?.role === 'admin') loadUsers();
     }
   } catch (error) {
     $('jobError').textContent = error.message;
     $('jobError').hidden = false;
   }
+}
+
+function recentJobMarkup(job, showOwner = false) {
+  const owner = showOwner && job.ownerUsername ? ` · ${escapeHtml(job.ownerUsername)}` : '';
+  const expired = job.filesDeleted ? ' · files expired' : '';
+  return `<div class="recent-item">
+    <div class="recent-name"><strong>${escapeHtml(job.sourceName || 'Scan')}</strong><span>${fmtDate(job.createdAt)}${owner}${expired} · ${fmt(job.parseStats?.uniqueDomains)} unique domains</span></div>
+    <span class="badge ${job.status === 'completed' ? 'good' : job.status === 'failed' ? 'bad' : ''}">${escapeHtml(job.status)}</span>
+    <button data-job="${job.id}">Open</button>
+  </div>`;
 }
 
 async function loadJobs() {
@@ -186,15 +220,15 @@ async function loadJobs() {
       $('recentJobs').innerHTML = '<div class="empty">No jobs yet.</div>';
       return;
     }
-    $('recentJobs').innerHTML = jobs.map((job) => `<div class="recent-item">
-      <div class="recent-name"><strong>${escapeHtml(job.sourceName || 'Scan')}</strong><span>${new Date(job.createdAt).toLocaleString()} · ${fmt(job.parseStats?.uniqueDomains)} unique domains</span></div>
-      <span class="badge ${job.status === 'completed' ? 'good' : job.status === 'failed' ? 'bad' : ''}">${escapeHtml(job.status)}</span>
-      <button data-job="${job.id}">Open</button>
-    </div>`).join('');
-    document.querySelectorAll('[data-job]').forEach((btn) => btn.addEventListener('click', () => openJob(btn.dataset.job)));
+    $('recentJobs').innerHTML = jobs.map((job) => recentJobMarkup(job)).join('');
+    bindJobButtons($('recentJobs'));
   } catch {
     $('recentJobs').innerHTML = '<div class="empty">Could not load job history.</div>';
   }
+}
+
+function bindJobButtons(container) {
+  container.querySelectorAll('[data-job]').forEach((btn) => btn.addEventListener('click', () => openJob(btn.dataset.job)));
 }
 
 async function openJob(id) {
@@ -209,12 +243,134 @@ async function openJob(id) {
 }
 
 async function deleteCurrentJob() {
-  if (!state.currentJobId || !confirm('Delete this job and its result files?')) return;
+  if (!state.currentJobId || !confirm('Delete this job history and its result files?')) return;
   try {
     await api(`/api/jobs/${state.currentJobId}`, { method: 'DELETE' });
     state.currentJobId = null;
     $('jobSection').hidden = true;
     loadJobs();
+    if (state.me?.role === 'admin') loadUsers();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function changePassword(event) {
+  event.preventDefault();
+  const message = $('passwordMessage');
+  message.hidden = true;
+  try {
+    const data = await api('/api/me/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentPassword: $('currentPassword').value,
+        newPassword: $('newPassword').value,
+        confirmPassword: $('confirmPassword').value
+      })
+    });
+    if (data.loggedOut) {
+      alert('Password changed. Sign in again.');
+      location.replace('/login');
+    }
+  } catch (error) {
+    message.className = 'form-message bad-text';
+    message.textContent = error.message;
+    message.hidden = false;
+  }
+}
+
+async function loadUsers() {
+  if (state.me?.role !== 'admin') return;
+  try {
+    const { users } = await api('/api/admin/users');
+    $('usersBody').innerHTML = users.map((u) => `<tr>
+      <td><strong>${escapeHtml(u.username)}</strong><div class="subtle small">${escapeHtml(u.id.slice(0, 8))}</div></td>
+      <td>${badge(u.role)}</td>
+      <td>${badge(u.isActive ? 'active' : 'disabled')}</td>
+      <td>${fmt(u.jobCount)}</td>
+      <td class="subtle">${escapeHtml(fmtDate(u.lastLoginAt))}</td>
+      <td><div class="action-row">
+        <button class="mini-btn" data-history-user="${u.id}" data-history-name="${escapeHtml(u.username)}">History</button>
+        <button class="mini-btn" data-reset-user="${u.id}">Reset password</button>
+        <button class="mini-btn" data-role-user="${u.id}" data-next-role="${u.role === 'admin' ? 'user' : 'admin'}">Make ${u.role === 'admin' ? 'user' : 'admin'}</button>
+        <button class="mini-btn ${u.isActive ? 'danger-text' : ''}" data-active-user="${u.id}" data-next-active="${u.isActive ? 'false' : 'true'}">${u.isActive ? 'Disable' : 'Enable'}</button>
+      </div></td>
+    </tr>`).join('');
+
+    document.querySelectorAll('[data-history-user]').forEach((btn) => btn.addEventListener('click', () => loadAdminHistory(btn.dataset.historyUser, btn.dataset.historyName)));
+    document.querySelectorAll('[data-reset-user]').forEach((btn) => btn.addEventListener('click', () => resetUserPassword(btn.dataset.resetUser)));
+    document.querySelectorAll('[data-role-user]').forEach((btn) => btn.addEventListener('click', () => patchUser(btn.dataset.roleUser, { role: btn.dataset.nextRole })));
+    document.querySelectorAll('[data-active-user]').forEach((btn) => btn.addEventListener('click', () => patchUser(btn.dataset.activeUser, { isActive: btn.dataset.nextActive === 'true' })));
+  } catch (error) {
+    $('adminMessage').className = 'form-message bad-text';
+    $('adminMessage').textContent = error.message;
+    $('adminMessage').hidden = false;
+  }
+}
+
+async function createUser(event) {
+  event.preventDefault();
+  const message = $('adminMessage');
+  message.hidden = true;
+  try {
+    await api('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: $('newUsername').value,
+        password: $('newUserPassword').value,
+        role: $('newUserRole').value
+      })
+    });
+    $('createUserForm').reset();
+    message.className = 'form-message good-text';
+    message.textContent = 'User created.';
+    message.hidden = false;
+    loadUsers();
+  } catch (error) {
+    message.className = 'form-message bad-text';
+    message.textContent = error.message;
+    message.hidden = false;
+  }
+}
+
+async function patchUser(id, patch) {
+  try {
+    await api(`/api/admin/users/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch)
+    });
+    loadUsers();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function resetUserPassword(id) {
+  const password = prompt('Enter a new password (minimum 10 characters). The user will be logged out of existing sessions.');
+  if (!password) return;
+  try {
+    await api(`/api/admin/users/${id}/password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    alert('Password reset.');
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function loadAdminHistory(userId, username) {
+  try {
+    const { jobs } = await api(`/api/admin/jobs?userId=${encodeURIComponent(userId)}`);
+    $('adminHistoryTitle').textContent = `${username} · scan history`;
+    $('adminJobs').innerHTML = jobs.length ? jobs.map((job) => recentJobMarkup(job, true)).join('') : '<div class="empty">No jobs for this user.</div>';
+    bindJobButtons($('adminJobs'));
+    $('adminHistory').hidden = false;
+    $('adminHistory').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (error) {
     alert(error.message);
   }
@@ -223,7 +379,21 @@ async function deleteCurrentJob() {
 $('scanForm').addEventListener('submit', submitScan);
 $('refreshJobs').addEventListener('click', loadJobs);
 $('deleteJobBtn').addEventListener('click', deleteCurrentJob);
-initTabs();
-initDropzone();
-loadHealth();
-loadJobs();
+$('logoutBtn').addEventListener('click', logout);
+$('passwordForm').addEventListener('submit', changePassword);
+$('createUserForm').addEventListener('submit', createUser);
+$('refreshUsers').addEventListener('click', loadUsers);
+$('closeAdminHistory').addEventListener('click', () => { $('adminHistory').hidden = true; });
+
+async function init() {
+  initTabs();
+  initDropzone();
+  await loadMe();
+  loadHealth();
+  loadJobs();
+}
+
+init().catch((error) => {
+  console.error(error);
+  location.replace('/login');
+});

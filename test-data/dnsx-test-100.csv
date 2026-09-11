@@ -1,0 +1,101 @@
+id,input,note
+1,google.com,Known live domain
+2,microsoft.com,Known live domain
+3,github.com,Known live domain
+4,openai.com,Known live domain
+5,apple.com,Known live domain
+6,amazon.com,Known live domain
+7,cloudflare.com,Known live domain
+8,linkedin.com,Known live domain
+9,salesforce.com,Known live domain
+10,oracle.com,Known live domain
+11,ibm.com,Known live domain
+12,adobe.com,Known live domain
+13,dropbox.com,Known live domain
+14,slack.com,Known live domain
+15,zoom.us,Known live domain
+16,atlassian.com,Known live domain
+17,notion.so,Known live domain
+18,stripe.com,Known live domain
+19,shopify.com,Known live domain
+20,hubspot.com,Known live domain
+21,test@google.com,Email input; domain should be extracted
+22,sales@microsoft.com,Email input; domain should be extracted
+23,contact@github.com,Email input; domain should be extracted
+24,hello@openai.com,Email input; domain should be extracted
+25,support@apple.com,Email input; domain should be extracted
+26,info@amazon.com,Email input; domain should be extracted
+27,admin@cloudflare.com,Email input; domain should be extracted
+28,sales@linkedin.com,Email input; domain should be extracted
+29,hello@salesforce.com,Email input; domain should be extracted
+30,info@oracle.com,Email input; domain should be extracted
+31,https://www.google.com,URL input; hostname should be extracted
+32,https://www.microsoft.com,URL input; hostname should be extracted
+33,https://github.com,URL input; hostname should be extracted
+34,https://openai.com,URL input; hostname should be extracted
+35,https://www.apple.com,URL input; hostname should be extracted
+36,https://www.amazon.com,URL input; hostname should be extracted
+37,https://www.cloudflare.com,URL input; hostname should be extracted
+38,https://www.linkedin.com,URL input; hostname should be extracted
+39,https://www.salesforce.com,URL input; hostname should be extracted
+40,https://www.oracle.com,URL input; hostname should be extracted
+41,example.com,Reserved example domain
+42,example.org,Reserved example domain
+43,example.net,Reserved example domain
+44,user@example.com,Reserved example email
+45,sales@example.org,Reserved example email
+46,https://example.net,Reserved example URL
+47,www.example.com,Reserved example hostname
+48,www.example.org,Reserved example hostname
+49,www.example.net,Reserved example hostname
+50,contact@example.com,Reserved example email
+51,company01.invalid,Reserved invalid TLD; should fail DNS
+52,company02.invalid,Reserved invalid TLD; should fail DNS
+53,company03.invalid,Reserved invalid TLD; should fail DNS
+54,company04.invalid,Reserved invalid TLD; should fail DNS
+55,company05.invalid,Reserved invalid TLD; should fail DNS
+56,sales@company06.invalid,Invalid email domain
+57,hello@company07.invalid,Invalid email domain
+58,https://company08.invalid,Invalid URL domain
+59,company09.invalid,Reserved invalid TLD; should fail DNS
+60,company10.invalid,Reserved invalid TLD; should fail DNS
+61,company11.invalid,Reserved invalid TLD; should fail DNS
+62,company12.invalid,Reserved invalid TLD; should fail DNS
+63,company13.invalid,Reserved invalid TLD; should fail DNS
+64,company14.invalid,Reserved invalid TLD; should fail DNS
+65,company15.invalid,Reserved invalid TLD; should fail DNS
+66,company16.invalid,Reserved invalid TLD; should fail DNS
+67,company17.invalid,Reserved invalid TLD; should fail DNS
+68,company18.invalid,Reserved invalid TLD; should fail DNS
+69,company19.invalid,Reserved invalid TLD; should fail DNS
+70,company20.invalid,Reserved invalid TLD; should fail DNS
+71,yahoo.com,Known public mail domain
+72,proton.me,Known public mail domain
+73,protonmail.com,Known public mail domain
+74,zoho.com,Known public domain
+75,fastmail.com,Known public mail domain
+76,mail.com,Known public mail domain
+77,aol.com,Known public mail domain
+78,outlook.com,Known public mail domain
+79,live.com,Known public mail domain
+80,icloud.com,Known public mail domain
+81,reddit.com,Known live domain
+82,stackoverflow.com,Known live domain
+83,wikipedia.org,Known live domain
+84,mozilla.org,Known live domain
+85,digitalocean.com,Known live domain
+86,google.com,Duplicate test
+87,test@google.com,Duplicate domain via email
+88,https://google.com,Duplicate domain via URL
+89,microsoft.com,Duplicate test
+90,sales@microsoft.com,Duplicate domain via email
+91,github.com,Duplicate test
+92,https://github.com,Duplicate domain via URL
+93,openai.com,Duplicate test
+94,hello@openai.com,Duplicate domain via email
+95,example.com,Duplicate reserved example domain
+96,canva.com,Known live domain
+97,vercel.com,Known live domain
+98,netlify.com,Known live domain
+99,render.com,Known live domain
+100,railway.app,Known live domain

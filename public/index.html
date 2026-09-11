@@ -4,32 +4,31 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MX Preflight</title>
-  <meta name="description" content="Bulk DNS and MX preflight checks powered by ProjectDiscovery dnsx." />
+  <meta name="description" content="Private bulk DNS and MX preflight checks powered by ProjectDiscovery dnsx." />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="shell">
     <header class="topbar">
-      <div>
-        <div class="brand-row">
-          <div class="brand-mark">MX</div>
-          <div>
-            <h1>MX Preflight</h1>
-            <p>Domain & mail-infrastructure filtering before deeper email verification.</p>
-          </div>
+      <div class="brand-row">
+        <div class="brand-mark">MX</div>
+        <div>
+          <h1>MX Preflight</h1>
+          <p>Private domain & mail-infrastructure filtering before deeper email verification.</p>
         </div>
       </div>
-      <div id="engineStatus" class="status-pill neutral">Checking dnsx…</div>
+      <div class="top-actions">
+        <div id="engineStatus" class="status-pill neutral">Checking dnsx…</div>
+        <div class="user-chip"><span id="currentUser">Loading…</span><span id="currentRole" class="role-tag"></span></div>
+        <button id="logoutBtn" class="ghost-btn">Log out</button>
+      </div>
     </header>
 
     <main>
       <section class="grid two-col">
         <div class="panel">
           <div class="panel-head">
-            <div>
-              <span class="eyebrow">NEW SCAN</span>
-              <h2>Upload a lead list</h2>
-            </div>
+            <div><span class="eyebrow">NEW SCAN</span><h2>Upload a lead list</h2></div>
             <div class="small muted">TXT or CSV · domains or email addresses</div>
           </div>
 
@@ -80,7 +79,7 @@
             <div class="flow-line"></div>
             <div class="flow-step"><span>3</span><div><strong>Mailbox verification</strong><small>Only for remaining candidates</small></div></div>
             <div class="flow-line"></div>
-            <div class="flow-step"><span>4</span><div><strong>Outbound</strong><small>Use cleaned, consent/compliance-appropriate data</small></div></div>
+            <div class="flow-step"><span>4</span><div><strong>Outbound</strong><small>Use cleaned, compliance-appropriate data</small></div></div>
           </div>
           <div class="note-box">
             <strong>NO_MX is not the same as invalid.</strong>
@@ -91,10 +90,7 @@
 
       <section id="jobSection" class="panel job-panel" hidden>
         <div class="panel-head">
-          <div>
-            <span class="eyebrow">CURRENT JOB</span>
-            <h2 id="jobTitle">Processing</h2>
-          </div>
+          <div><span class="eyebrow">CURRENT JOB</span><h2 id="jobTitle">Processing</h2><div id="jobOwner" class="small muted"></div></div>
           <button id="deleteJobBtn" class="ghost-btn danger" hidden>Delete job</button>
         </div>
 
@@ -113,6 +109,7 @@
           <div class="metric"><span>Unknown</span><strong id="mUnknown">0</strong></div>
         </div>
 
+        <div id="expiredFiles" class="notice-box" hidden>This scan remains in history, but its result files have expired and are no longer stored on disk.</div>
         <div id="downloads" class="downloads" hidden></div>
 
         <div id="previewWrap" class="table-wrap" hidden>
@@ -126,16 +123,66 @@
 
       <section class="panel recent-panel">
         <div class="panel-head">
-          <div><span class="eyebrow">HISTORY</span><h2>Recent jobs</h2></div>
+          <div><span class="eyebrow">MY HISTORY</span><h2>Recent jobs</h2></div>
           <button id="refreshJobs" class="ghost-btn">Refresh</button>
         </div>
         <div id="recentJobs" class="recent-list"><div class="empty">No jobs yet.</div></div>
+      </section>
+
+      <section class="grid account-grid">
+        <div class="panel">
+          <div class="panel-head"><div><span class="eyebrow">ACCOUNT</span><h2>Change password</h2></div></div>
+          <form id="passwordForm" class="compact-form">
+            <label>Current password<input id="currentPassword" type="password" autocomplete="current-password" required /></label>
+            <label>New password<input id="newPassword" type="password" autocomplete="new-password" minlength="10" required /></label>
+            <label>Confirm new password<input id="confirmPassword" type="password" autocomplete="new-password" minlength="10" required /></label>
+            <button class="ghost-btn" type="submit">Change password</button>
+            <div id="passwordMessage" class="form-message" hidden></div>
+          </form>
+        </div>
+
+        <div class="panel privacy-panel">
+          <span class="eyebrow">PRIVATE STORAGE</span>
+          <h2>User-isolated history</h2>
+          <p>Accounts and scan metadata are stored in local SQLite. Uploaded/result files remain on the server filesystem and are separated by job. Normal users can only access their own jobs; administrators can manage users and inspect histories.</p>
+        </div>
+      </section>
+
+      <section id="adminPanel" class="panel admin-panel" hidden>
+        <div class="panel-head">
+          <div><span class="eyebrow">ADMINISTRATION</span><h2>Users & histories</h2></div>
+          <button id="refreshUsers" class="ghost-btn">Refresh</button>
+        </div>
+
+        <div class="admin-grid">
+          <form id="createUserForm" class="admin-create">
+            <h3>Create user</h3>
+            <label>Username<input id="newUsername" type="text" autocomplete="off" required /></label>
+            <label>Temporary password<input id="newUserPassword" type="password" autocomplete="new-password" minlength="10" required /></label>
+            <label>Role<select id="newUserRole"><option value="user">User</option><option value="admin">Admin</option></select></label>
+            <button class="primary-btn" type="submit">Create user</button>
+            <div id="adminMessage" class="form-message" hidden></div>
+          </form>
+
+          <div>
+            <div class="table-wrap admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Jobs</th><th>Last login</th><th>Actions</th></tr></thead>
+                <tbody id="usersBody"></tbody>
+              </table>
+            </div>
+            <div id="adminHistory" class="admin-history" hidden>
+              <div class="table-head"><strong id="adminHistoryTitle">User history</strong><button id="closeAdminHistory" class="ghost-btn">Close</button></div>
+              <div id="adminJobs" class="recent-list"></div>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
     <footer>
       <span>MX Preflight is a wrapper around ProjectDiscovery dnsx. dnsx remains a separate open-source project.</span>
-      <span>Result files are automatically eligible for cleanup after the configured retention period.</span>
+      <span>Scan history stays in SQLite. Result files can expire separately based on server retention settings.</span>
     </footer>
   </div>
   <script src="/app.js" defer></script>
