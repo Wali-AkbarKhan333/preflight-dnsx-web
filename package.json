@@ -1,8 +1,8 @@
 {
   "name": "dnsx-web-preflight",
-  "version": "2.3.0",
+  "version": "2.6.2",
   "private": true,
-  "description": "Private multi-user DNS/MX preflight UI using dnsx, SQLite scan history, a single-worker scan queue, cancellation, and live progress.",
+  "description": "Private multi-user DNS/MX preflight UI using dnsx with canonical results, serial scanning, persistent checkpoints, pause/resume, partial exports, restart recovery, and resumable jobs.",
   "type": "module",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",

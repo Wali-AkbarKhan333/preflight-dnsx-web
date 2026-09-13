@@ -79,7 +79,7 @@ textarea:focus, input:focus { border-color:#3f627f; box-shadow:0 0 0 3px rgba(56
 .progress-track { height:7px; background:#09131c; border-radius:999px; overflow:hidden; border:1px solid #182738; }
 .progress-bar { width:0; height:100%; background:linear-gradient(90deg, var(--accent), var(--accent-2)); transition:width .3s ease; }
 .error-box { margin-top:12px; padding:10px 12px; border-radius:9px; border:1px solid rgba(251,113,133,.25); background:rgba(251,113,133,.06); color:#fecdd3; font-size:12px; white-space:pre-wrap; }
-.summary-grid { display:grid; grid-template-columns:repeat(6, 1fr); gap:9px; margin-bottom:16px; }
+.summary-grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:9px; margin-bottom:16px; }
 .metric { background:#0b151f; border:1px solid var(--border); border-radius:11px; padding:11px; }
 .metric span { display:block; color:var(--muted); font-size:10px; margin-bottom:5px; }
 .metric strong { font-size:18px; }

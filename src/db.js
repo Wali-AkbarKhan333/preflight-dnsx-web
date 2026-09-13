@@ -31,6 +31,8 @@ function toJob(row) {
     downloads: parseJson(row.downloads_json, []),
     preview: parseJson(row.preview_json, []),
     dnsx: parseJson(row.dnsx_json, null),
+    resumable: Boolean(row.resumable),
+    checkpoint: parseJson(row.checkpoint_json, null),
     filesDeleted: Boolean(row.files_deleted)
   };
 }
@@ -96,6 +98,11 @@ export class AppDatabase {
       CREATE INDEX IF NOT EXISTS idx_jobs_user_created ON jobs(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_jobs_updated ON jobs(updated_at);
     `);
+
+    // Automatic additive migration for v2.5 checkpoint/resume support.
+    const jobColumns = new Set(this.db.prepare('PRAGMA table_info(jobs)').all().map((row) => row.name));
+    if (!jobColumns.has('resumable')) this.db.exec('ALTER TABLE jobs ADD COLUMN resumable INTEGER NOT NULL DEFAULT 0');
+    if (!jobColumns.has('checkpoint_json')) this.db.exec('ALTER TABLE jobs ADD COLUMN checkpoint_json TEXT');
   }
 
   close() {
@@ -233,15 +240,16 @@ export class AppDatabase {
     this.db.prepare(`
       INSERT INTO jobs (
         id, user_id, source_name, status, stage, progress, created_at, updated_at,
-        parse_stats_json, settings_json, summary_json, error, downloads_json, preview_json, dnsx_json, files_deleted
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        parse_stats_json, settings_json, summary_json, error, downloads_json, preview_json, dnsx_json, resumable, checkpoint_json, files_deleted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       job.id, job.userId, job.sourceName, job.status, job.stage, job.progress,
       job.createdAt, job.updatedAt,
       JSON.stringify(job.parseStats || {}), JSON.stringify(job.settings || {}),
       job.summary == null ? null : JSON.stringify(job.summary), job.error || null,
       JSON.stringify(job.downloads || []), JSON.stringify(job.preview || []),
-      job.dnsx == null ? null : JSON.stringify(job.dnsx), job.filesDeleted ? 1 : 0
+      job.dnsx == null ? null : JSON.stringify(job.dnsx), job.resumable ? 1 : 0,
+      job.checkpoint == null ? null : JSON.stringify(job.checkpoint), job.filesDeleted ? 1 : 0
     );
     return job;
   }
@@ -251,14 +259,15 @@ export class AppDatabase {
       UPDATE jobs SET
         source_name = ?, status = ?, stage = ?, progress = ?, updated_at = ?,
         parse_stats_json = ?, settings_json = ?, summary_json = ?, error = ?,
-        downloads_json = ?, preview_json = ?, dnsx_json = ?, files_deleted = ?
+        downloads_json = ?, preview_json = ?, dnsx_json = ?, resumable = ?, checkpoint_json = ?, files_deleted = ?
       WHERE id = ?
     `).run(
       job.sourceName, job.status, job.stage, job.progress, job.updatedAt,
       JSON.stringify(job.parseStats || {}), JSON.stringify(job.settings || {}),
       job.summary == null ? null : JSON.stringify(job.summary), job.error || null,
       JSON.stringify(job.downloads || []), JSON.stringify(job.preview || []),
-      job.dnsx == null ? null : JSON.stringify(job.dnsx), job.filesDeleted ? 1 : 0,
+      job.dnsx == null ? null : JSON.stringify(job.dnsx), job.resumable ? 1 : 0,
+      job.checkpoint == null ? null : JSON.stringify(job.checkpoint), job.filesDeleted ? 1 : 0,
       job.id
     );
   }

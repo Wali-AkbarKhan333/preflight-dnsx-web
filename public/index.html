@@ -82,7 +82,7 @@
       <section id="jobSection" class="panel job-panel" hidden>
         <div class="panel-head">
           <div><span class="eyebrow">CURRENT JOB</span><h2 id="jobTitle">Processing</h2><div id="jobOwner" class="small muted"></div></div>
-          <div class="job-actions"><button id="cancelJobBtn" class="ghost-btn danger" hidden>Cancel scan</button><button id="deleteJobBtn" class="ghost-btn danger" hidden>Delete job</button></div>
+          <div class="job-actions"><button id="resumeJobBtn" class="primary-btn" hidden>Resume scan</button><button id="pauseJobBtn" class="ghost-btn" hidden>Pause scan</button><button id="cancelJobBtn" class="ghost-btn danger" hidden>Cancel scan</button><button id="deleteJobBtn" class="ghost-btn danger" hidden>Delete job</button></div>
         </div>
 
         <div class="progress-wrap">
@@ -92,19 +92,23 @@
         </div>
 
         <div id="liveStats" class="live-stats" hidden>
-          <div class="live-stat"><span>Stage processed</span><strong id="liveProcessed">0 / 0</strong></div>
+          <div class="live-stat"><span>Current stage processed</span><strong id="liveProcessed">0 / 0</strong></div>
           <div class="live-stat"><span>Current rate</span><strong id="liveRate">0 domains/s</strong></div>
           <div class="live-stat"><span>Elapsed</span><strong id="liveElapsed">0s</strong></div>
-          <div class="live-stat"><span>Estimated remaining</span><strong id="liveEta">—</strong></div>
+          <div class="live-stat"><span>Current stage ETA</span><strong id="liveEta">—</strong></div>
         </div>
 
         <div id="summaryGrid" class="summary-grid" hidden>
-          <div class="metric"><span>Total domains</span><strong id="mTotal">0</strong></div>
-          <div class="metric good"><span>Mail enabled</span><strong id="mMail">0</strong></div>
+          <div class="metric"><span>Input records</span><strong id="mInput">0</strong></div>
+          <div class="metric"><span>Input emails</span><strong id="mInputEmails">0</strong></div>
+          <div class="metric"><span>Unique domains</span><strong id="mTotal">0</strong></div>
+          <div class="metric good"><span>MX-enabled domains</span><strong id="mMailDomains">0</strong></div>
+          <div class="metric good"><span>MX-enabled emails</span><strong id="mMailEmails">0</strong></div>
           <div class="metric"><span>No MX</span><strong id="mNoMx">0</strong></div>
           <div class="metric bad"><span>Null MX</span><strong id="mNullMx">0</strong></div>
           <div class="metric bad"><span>DNS failed</span><strong id="mFailed">0</strong></div>
           <div class="metric"><span>Unknown</span><strong id="mUnknown">0</strong></div>
+          <div id="unprocessedMetric" class="metric" hidden><span>Unprocessed</span><strong id="mUnprocessed">0</strong></div>
         </div>
 
         <div id="expiredFiles" class="notice-box" hidden>This scan remains in history, but its result files have expired and are no longer stored on disk.</div>

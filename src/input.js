@@ -131,6 +131,7 @@ export function parseInput({ fileText = '', filename = '', pastedText = '' } = {
   if (pastedText) consume(candidatesFromText(pastedText));
 
   const uniqueDomains = Array.from(uniqueDomainSet);
+  const inputEmails = records.reduce((count, record) => count + (record.inputType === 'email' ? 1 : 0), 0);
 
   return {
     records,
@@ -138,6 +139,8 @@ export function parseInput({ fileText = '', filename = '', pastedText = '' } = {
     stats: {
       rawValues,
       acceptedRecords: records.length,
+      inputEmails,
+      inputOtherRecords: records.length - inputEmails,
       rejectedValues,
       uniqueDomains: uniqueDomains.length
     }

@@ -22,3 +22,23 @@ test('classifies mail-enabled, null MX, no MX and NXDOMAIN', () => {
   assert.equal(sum.totalDomains, 4);
   assert.equal(sum.mailEnabled, 1);
 });
+
+test('normalizes MX presentation values with preference and null-MX targets', () => {
+  const map = mergeDnsxObjects([
+    {
+      host: 'weighted.example',
+      mx: ['10 mx1.weighted.example.', '20 mx2.weighted.example.'],
+      status_code: 'NOERROR'
+    },
+    {
+      host: 'null-weighted.example',
+      mx: ['0 .'],
+      status_code: 'NOERROR'
+    }
+  ]);
+
+  const rows = classifyDomains(['weighted.example', 'null-weighted.example'], map);
+  assert.equal(rows[0].mailStatus, 'MAIL_ENABLED');
+  assert.deepEqual(rows[0].mx, ['mx1.weighted.example', 'mx2.weighted.example']);
+  assert.equal(rows[1].mailStatus, 'NULL_MX');
+});

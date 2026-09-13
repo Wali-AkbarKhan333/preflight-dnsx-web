@@ -49,3 +49,43 @@ test('last active administrator cannot be disabled', async () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('v2.5 automatically adds resume columns to an existing v2.4 jobs table', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { dir, file } = tempDb();
+  const legacy = new DatabaseSync(file);
+  try {
+    legacy.exec(`
+      CREATE TABLE jobs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        source_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        stage TEXT NOT NULL,
+        progress INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        parse_stats_json TEXT NOT NULL DEFAULT '{}',
+        settings_json TEXT NOT NULL DEFAULT '{}',
+        summary_json TEXT,
+        error TEXT,
+        downloads_json TEXT NOT NULL DEFAULT '[]',
+        preview_json TEXT NOT NULL DEFAULT '[]',
+        dnsx_json TEXT,
+        files_deleted INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  } finally {
+    legacy.close();
+  }
+
+  const db = new AppDatabase(file);
+  try {
+    const columns = new Set(db.db.prepare('PRAGMA table_info(jobs)').all().map((row) => row.name));
+    assert.equal(columns.has('resumable'), true);
+    assert.equal(columns.has('checkpoint_json'), true);
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

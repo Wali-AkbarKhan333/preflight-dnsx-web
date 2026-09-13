@@ -42,6 +42,8 @@ export class JobStore {
       downloads: [],
       preview: [],
       dnsx: null,
+      resumable: false,
+      checkpoint: null,
       filesDeleted: false
     };
 
@@ -69,6 +71,33 @@ export class JobStore {
 
   async list(limit = 20, { userId = null } = {}) {
     return this.db.listJobs({ userId, limit });
+  }
+
+
+  async loadCheckpoint(id) {
+    try {
+      const text = await fs.readFile(this.file(id, 'checkpoint.json'), 'utf8');
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  }
+
+  async saveCheckpoint(id, checkpoint) {
+    const file = this.file(id, 'checkpoint.json');
+    const temp = this.file(id, '.checkpoint.tmp');
+    await fs.writeFile(temp, JSON.stringify(checkpoint, null, 2), 'utf8');
+    await fs.rename(temp, file);
+    return checkpoint;
+  }
+
+  async checkpointExists(id) {
+    const checkpoint = await this.loadCheckpoint(id);
+    return Boolean(checkpoint && checkpoint.version === 1 && checkpoint.phase !== 'completed');
+  }
+
+  async removeFiles(id, names = []) {
+    await Promise.all(names.map((name) => fs.rm(this.file(id, name), { force: true }).catch(() => {})));
   }
 
   async remove(id) {

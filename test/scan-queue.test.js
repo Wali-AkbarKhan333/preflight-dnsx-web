@@ -99,3 +99,39 @@ test('canceling the active job aborts it and allows the next queued job to start
   assert.equal((await store.get('b')).status, 'running');
   releaseB();
 });
+
+test('server restart converts a running checkpointed job into resumable interrupted state', async () => {
+  const store = fakeStore([{ id:'a', status:'running', resumable:false }]);
+  store.loadCheckpoint = async () => ({
+    version: 1,
+    phase: 'main',
+    mainProcessed: 10000,
+    totalDomains: 50000,
+    activeElapsedMs: 5000,
+    updatedAt: new Date().toISOString()
+  });
+  store.checkpointExists = async () => true;
+
+  const queue = new ScanQueue({ store, runner: async () => {}, concurrency:1 });
+  await queue.recover([await store.get('a')]);
+  const recovered = await store.get('a');
+  assert.equal(recovered.status, 'interrupted');
+  assert.equal(recovered.resumable, true);
+  assert.equal(recovered.checkpoint.mainProcessed, 10000);
+});
+
+test('resuming an interrupted job puts it back into the serial queue', async () => {
+  const store = fakeStore([{ id:'a', status:'interrupted', resumable:true }]);
+  store.loadCheckpoint = async () => ({ version:1, phase:'main', mainProcessed:1000, totalDomains:5000 });
+  store.checkpointExists = async () => true;
+  let started = false;
+  const runner = async (job, jobStore) => {
+    started = true;
+    await jobStore.update(job.id, { status:'completed', stage:'Complete', progress:100, resumable:false });
+  };
+  const queue = new ScanQueue({ store, runner, concurrency:1 });
+  const queued = await queue.resume('a');
+  assert.equal(queued.status, 'queued');
+  await waitFor(() => started);
+  await waitFor(async () => (await store.get('a')).status === 'completed');
+});

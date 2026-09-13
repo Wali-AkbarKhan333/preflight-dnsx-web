@@ -18,7 +18,7 @@ const fmtDuration = (seconds) => {
 
 function badge(value) {
   const good = ['DNS_ACTIVE', 'MAIL_ENABLED', 'completed', 'active'].includes(value);
-  const bad = ['DNS_FAILED', 'NULL_MX', 'failed', 'disabled'].includes(value);
+  const bad = ['DNS_FAILED', 'NULL_MX', 'failed', 'canceled', 'disabled'].includes(value);
   return `<span class="badge ${good ? 'good' : bad ? 'bad' : ''}">${escapeHtml(value)}</span>`;
 }
 
@@ -147,26 +147,39 @@ function renderJob(job) {
   $('jobTitle').textContent = `${job.sourceName || 'Scan'} · ${job.id.slice(0, 8)}`;
   $('jobOwner').textContent = state.me?.role === 'admin' && job.ownerUsername ? `Owner: ${job.ownerUsername}` : '';
   $('jobStage').textContent = job.stage || job.status;
-  $('jobProgress').textContent = `${job.progress || 0}%`;
+  $('jobProgress').textContent = `Overall ${job.progress || 0}%`;
   $('progressBar').style.width = `${Math.max(0, Math.min(100, job.progress || 0))}%`;
 
   $('jobError').hidden = !job.error;
   $('jobError').textContent = job.error || '';
-  const cancelable = ['queued','running'].includes(job.status);
+  const activelyRunning = job.status === 'running';
+  const cancelable = ['queued','running','paused','interrupted','failed'].includes(job.status);
+  const resumable = Boolean(job.resumable && ['interrupted','failed','paused'].includes(job.status));
+  $('resumeJobBtn').hidden = !resumable;
+  $('resumeJobBtn').disabled = false;
+  $('pauseJobBtn').hidden = !activelyRunning;
+  $('pauseJobBtn').disabled = String(job.stage || '').startsWith('Pausing');
+  $('pauseJobBtn').textContent = $('pauseJobBtn').disabled ? 'Pausing…' : 'Pause scan';
   $('cancelJobBtn').hidden = !cancelable;
   $('cancelJobBtn').textContent = job.status === 'queued' ? 'Cancel queued job' : (job.stage === 'Canceling…' ? 'Canceling…' : 'Cancel scan');
   $('cancelJobBtn').disabled = job.stage === 'Canceling…';
-  $('deleteJobBtn').hidden = cancelable;
+  $('deleteJobBtn').hidden = ['queued','running'].includes(job.status);
   $('expiredFiles').hidden = !job.filesDeleted;
 
   if (job.summary) {
     $('summaryGrid').hidden = false;
+    $('mInput').textContent = fmt(job.summary.totalInputRecords ?? job.parseStats?.acceptedRecords);
+    $('mInputEmails').textContent = fmt(job.summary.inputEmails ?? job.parseStats?.inputEmails);
     $('mTotal').textContent = fmt(job.summary.totalDomains);
-    $('mMail').textContent = fmt(job.summary.mailEnabled);
+    $('mMailDomains').textContent = fmt(job.summary.mxEnabledDomains ?? job.summary.mailEnabled);
+    $('mMailEmails').textContent = fmt(job.summary.mxEnabledEmails);
     $('mNoMx').textContent = fmt(job.summary.noMx);
     $('mNullMx').textContent = fmt(job.summary.nullMx);
     $('mFailed').textContent = fmt(job.summary.dnsFailed);
     $('mUnknown').textContent = fmt(job.summary.unknown);
+    const unprocessed = Number(job.summary.unprocessedDomains ?? Math.max(0, Number(job.summary.totalDomains || 0) - Number(job.summary.processedDomains || 0)));
+    $('mUnprocessed').textContent = fmt(unprocessed);
+    $('unprocessedMetric').hidden = !(job.summary.partial || unprocessed > 0);
 
     const stageTotal = Number(job.summary.stageTotal || job.summary.totalDomains || 0);
     const stageProcessed = Number(job.summary.stageProcessed || 0);
@@ -177,16 +190,28 @@ function renderJob(job) {
     $('liveStats').hidden = false;
   } else {
     $('summaryGrid').hidden = true;
+    $('unprocessedMetric').hidden = true;
     $('liveStats').hidden = true;
   }
 
   if (job.downloads?.length && !job.filesDeleted) {
     const pretty = {
-      'full-results.csv': 'Full results',
-      'domain-results.csv': 'Unique domains',
-      'mail-enabled.csv': 'Mail enabled',
-      'excluded.csv': 'Excluded',
-      'review.csv': 'Needs review'
+      'scan-summary.csv': 'Scan summary',
+      'full-results.csv': 'All input results',
+      'domain-results.csv': 'All unique domains',
+      'mx-enabled-emails.csv': 'MX-enabled emails',
+      'mx-enabled-domains.csv': 'MX-enabled domains',
+      'mail-enabled.csv': 'Legacy mail-enabled inputs',
+      'excluded.csv': 'Excluded inputs',
+      'review.csv': 'Needs review',
+      'partial-scan-summary.csv': 'Partial scan summary',
+      'partial-all-results.csv': 'Partial scanned inputs',
+      'partial-domain-results.csv': 'Partial scanned domains',
+      'partial-mx-enabled-emails.csv': 'Partial MX-enabled emails',
+      'partial-mx-enabled-domains.csv': 'Partial MX-enabled domains',
+      'partial-excluded.csv': 'Partial excluded inputs',
+      'partial-review.csv': 'Partial needs review',
+      'unprocessed-domains.csv': 'Unprocessed domains'
     };
     $('downloads').innerHTML = job.downloads.map((name) => `<a href="/api/jobs/${job.id}/download/${name}">↓ ${pretty[name] || name}</a>`).join('');
     $('downloads').hidden = false;
@@ -230,12 +255,16 @@ async function pollJob() {
 function recentJobMarkup(job, showOwner = false) {
   const owner = showOwner && job.ownerUsername ? ` · ${escapeHtml(job.ownerUsername)}` : '';
   const expired = job.filesDeleted ? ' · files expired' : '';
-  const canCancel = ['queued','running'].includes(job.status);
+  const canPause = job.status === 'running';
+  const canCancel = ['queued','running','paused','interrupted','failed'].includes(job.status);
+  const canResume = Boolean(job.resumable && ['interrupted','failed','paused'].includes(job.status));
   const statusClass = job.status === 'completed' ? 'good' : ['failed','canceled'].includes(job.status) ? 'bad' : '';
+  const processed = Number(job.summary?.processedDomains || 0);
+  const progressDetail = processed > 0 && job.status !== 'completed' ? ` · ${fmt(processed)} checkpointed` : '';
   return `<div class="recent-item">
-    <div class="recent-name"><strong>${escapeHtml(job.sourceName || 'Scan')}</strong><span>${fmtDate(job.createdAt)}${owner}${expired} · ${fmt(job.parseStats?.uniqueDomains)} unique domains${job.status === 'queued' ? ` · ${escapeHtml(job.stage || 'Queued')}` : ''}</span></div>
+    <div class="recent-name"><strong>${escapeHtml(job.sourceName || 'Scan')}</strong><span>${fmtDate(job.createdAt)}${owner}${expired} · ${fmt(job.parseStats?.uniqueDomains)} unique domains${progressDetail}${job.status === 'queued' ? ` · ${escapeHtml(job.stage || 'Queued')}` : ''}</span></div>
     <span class="badge ${statusClass}">${escapeHtml(job.status)}</span>
-    <div class="recent-actions">${canCancel ? `<button class="danger-text" data-cancel-job="${job.id}">Cancel</button>` : ''}<button data-job="${job.id}">Open</button></div>
+    <div class="recent-actions">${canResume ? `<button class="mini-btn" data-resume-job="${job.id}">Resume</button>` : ''}${canPause ? `<button class="mini-btn" data-pause-job="${job.id}">Pause</button>` : ''}${canCancel ? `<button class="danger-text" data-cancel-job="${job.id}">Cancel</button>` : ''}<button data-job="${job.id}">Open</button></div>
   </div>`;
 }
 
@@ -255,6 +284,24 @@ async function loadJobs() {
 
 function bindJobButtons(container) {
   container.querySelectorAll('[data-job]').forEach((btn) => btn.addEventListener('click', () => openJob(btn.dataset.job)));
+  container.querySelectorAll('[data-resume-job]').forEach((btn) => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      await resumeJob(btn.dataset.resumeJob);
+    } catch (error) {
+      alert(error.message);
+      btn.disabled = false;
+    }
+  }));
+  container.querySelectorAll('[data-pause-job]').forEach((btn) => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      await pauseJob(btn.dataset.pauseJob);
+    } catch (error) {
+      alert(error.message);
+      btn.disabled = false;
+    }
+  }));
   container.querySelectorAll('[data-cancel-job]').forEach((btn) => btn.addEventListener('click', async () => {
     btn.disabled = true;
     try {
@@ -266,8 +313,47 @@ function bindJobButtons(container) {
   }));
 }
 
+async function resumeJob(id) {
+  if (!id) return;
+  const { job } = await api(`/api/jobs/${id}/resume`, { method: 'POST' });
+  state.currentJobId = id;
+  renderJob(job);
+  await loadJobs();
+  pollJob();
+}
+
+async function resumeCurrentJob() {
+  if (!state.currentJobId) return;
+  $('resumeJobBtn').disabled = true;
+  try {
+    await resumeJob(state.currentJobId);
+  } catch (error) {
+    alert(error.message);
+    $('resumeJobBtn').disabled = false;
+  }
+}
+
+async function pauseJob(id) {
+  if (!id) return;
+  const { job } = await api(`/api/jobs/${id}/pause`, { method: 'POST' });
+  if (state.currentJobId === id) renderJob(job);
+  await loadJobs();
+  if (state.currentJobId === id) pollJob();
+}
+
+async function pauseCurrentJob() {
+  if (!state.currentJobId) return;
+  $('pauseJobBtn').disabled = true;
+  try {
+    await pauseJob(state.currentJobId);
+  } catch (error) {
+    alert(error.message);
+    $('pauseJobBtn').disabled = false;
+  }
+}
+
 async function cancelJob(id) {
-  if (!id || !confirm('Cancel this scan? Partial results will not be exported.')) return;
+  if (!id || !confirm('Cancel this scan? Fully checkpointed results will be kept and made available as partial reports.')) return;
   const { job } = await api(`/api/jobs/${id}/cancel`, { method: 'POST' });
   if (state.currentJobId === id) renderJob(job);
   await loadJobs();
@@ -431,6 +517,8 @@ async function loadAdminHistory(userId, username) {
 
 $('scanForm').addEventListener('submit', submitScan);
 $('refreshJobs').addEventListener('click', loadJobs);
+$('resumeJobBtn').addEventListener('click', resumeCurrentJob);
+$('pauseJobBtn').addEventListener('click', pauseCurrentJob);
 $('cancelJobBtn').addEventListener('click', cancelCurrentJob);
 $('deleteJobBtn').addEventListener('click', deleteCurrentJob);
 $('logoutBtn').addEventListener('click', logout);

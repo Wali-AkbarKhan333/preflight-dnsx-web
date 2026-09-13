@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { parseInput } from './src/input.js';
 import { JobStore } from './src/store.js';
 import { AppDatabase } from './src/db.js';
-import { locateDnsx, runScan } from './src/scanner.js';
+import { locateDnsx, parseResolverList, runScan } from './src/scanner.js';
 import { ScanQueue } from './src/scan-queue.js';
+import { buildPartialArtifacts, PARTIAL_DOWNLOADS } from './src/partial-reports.js';
 import {
   hashPassword,
   verifyPassword,
@@ -57,6 +58,7 @@ await store.cleanupResultFiles(resultRetentionHours).catch(() => {});
 const scanQueue = new ScanQueue({
   store,
   runner: runScan,
+  partialBuilder: buildPartialArtifacts,
   concurrency: Number(process.env.MAX_CONCURRENT_SCANS || 1)
 });
 await scanQueue.recover(await store.list(500));
@@ -73,7 +75,19 @@ const mime = {
 
 const publicStatic = new Set(['/styles.css', '/login.js', '/setup.js']);
 const loginAttempts = new Map();
-const allowedDownloads = new Set(['full-results.csv', 'domain-results.csv', 'mail-enabled.csv', 'excluded.csv', 'review.csv']);
+const allowedDownloads = new Set(['scan-summary.csv', 'full-results.csv', 'domain-results.csv', 'mx-enabled-emails.csv', 'mx-enabled-domains.csv', 'mail-enabled.csv', 'excluded.csv', 'review.csv', ...PARTIAL_DOWNLOADS]);
+const partialReportBuilds = new Map();
+
+async function ensurePartialReports(jobId) {
+  if (partialReportBuilds.has(jobId)) return partialReportBuilds.get(jobId);
+  const task = (async () => {
+    const patch = await buildPartialArtifacts(jobId, store, { generateFiles: true });
+    if (patch && Object.keys(patch).length) await store.update(jobId, patch);
+    return patch;
+  })().finally(() => partialReportBuilds.delete(jobId));
+  partialReportBuilds.set(jobId, task);
+  return task;
+}
 
 function securityHeaders(req, extra = {}) {
   return {
@@ -388,6 +402,10 @@ const server = http.createServer(async (req, res) => {
           maxUploadMb,
           maxThreads: Number(process.env.MAX_THREADS || 500),
           maxRateLimit: Number(process.env.MAX_RATE_LIMIT || 10000)
+        },
+        resolvers: {
+          main: parseResolverList(process.env.DNS_RESOLVERS),
+          retry: parseResolverList(process.env.UNKNOWN_RETRY_RESOLVERS, parseResolverList(process.env.DNS_RESOLVERS))
         }
       });
     }
@@ -418,11 +436,36 @@ const server = http.createServer(async (req, res) => {
       return sendJson(req, res, 202, { job: queuedJob });
     }
 
+    const resumeMatch = pathname.match(/^\/api\/jobs\/([0-9a-f-]+)\/resume$/i);
+    if (resumeMatch && req.method === 'POST') {
+      const job = await store.get(resumeMatch[1]);
+      if (!canAccessJob(auth, job)) return sendJson(req, res, job ? 403 : 404, { error: job ? 'Access denied.' : 'Job not found.' });
+      if (!['interrupted', 'failed', 'paused'].includes(job.status) || !job.resumable) {
+        return sendJson(req, res, 409, { error: 'This job does not have a resumable checkpoint.' });
+      }
+      await store.removeFiles(job.id, PARTIAL_DOWNLOADS);
+      await store.update(job.id, { downloads: [] });
+      const updated = await scanQueue.resume(job.id);
+      if (!updated?.resumable && updated?.status !== 'queued' && updated?.status !== 'running') {
+        return sendJson(req, res, 409, { error: updated?.error || 'The saved checkpoint is unavailable.' });
+      }
+      return sendJson(req, res, 202, { job: updated });
+    }
+
+    const pauseMatch = pathname.match(/^\/api\/jobs\/([0-9a-f-]+)\/pause$/i);
+    if (pauseMatch && req.method === 'POST') {
+      const job = await store.get(pauseMatch[1]);
+      if (!canAccessJob(auth, job)) return sendJson(req, res, job ? 403 : 404, { error: job ? 'Access denied.' : 'Job not found.' });
+      if (job.status !== 'running') return sendJson(req, res, 409, { error: 'Only a running job can be paused.' });
+      const updated = await scanQueue.pause(job.id);
+      return sendJson(req, res, 202, { job: updated });
+    }
+
     const cancelMatch = pathname.match(/^\/api\/jobs\/([0-9a-f-]+)\/cancel$/i);
     if (cancelMatch && req.method === 'POST') {
       const job = await store.get(cancelMatch[1]);
       if (!canAccessJob(auth, job)) return sendJson(req, res, job ? 403 : 404, { error: job ? 'Access denied.' : 'Job not found.' });
-      if (!['queued', 'running'].includes(job.status)) return sendJson(req, res, 409, { error: 'Only queued or running jobs can be canceled.' });
+      if (!['queued', 'running', 'paused', 'interrupted', 'failed'].includes(job.status)) return sendJson(req, res, 409, { error: 'This job cannot be canceled in its current state.' });
       const updated = await scanQueue.cancel(job.id);
       return sendJson(req, res, 202, { job: updated });
     }
@@ -437,7 +480,7 @@ const server = http.createServer(async (req, res) => {
     if (jobMatch && req.method === 'DELETE') {
       const job = await store.get(jobMatch[1]);
       if (!canAccessJob(auth, job)) return sendJson(req, res, job ? 403 : 404, { error: job ? 'Access denied.' : 'Job not found.' });
-      if (['running', 'queued'].includes(job.status)) return sendJson(req, res, 409, { error: 'A running job cannot be deleted.' });
+      if (['running', 'queued'].includes(job.status)) return sendJson(req, res, 409, { error: 'A running or queued job cannot be deleted.' });
       await store.remove(job.id);
       res.writeHead(204, securityHeaders(req));
       res.end();
@@ -453,7 +496,20 @@ const server = http.createServer(async (req, res) => {
       if (job.filesDeleted) return sendJson(req, res, 410, { error: 'Result files for this historical job have expired.' });
       const file = store.file(id, name);
       let stat;
-      try { stat = await fsp.stat(file); } catch { return sendJson(req, res, 404, { error: 'Result file not available yet.' }); }
+      try {
+        stat = await fsp.stat(file);
+      } catch {
+        if (PARTIAL_DOWNLOADS.includes(name)) {
+          try {
+            await ensurePartialReports(id);
+            stat = await fsp.stat(file);
+          } catch (error) {
+            return sendJson(req, res, 409, { error: error?.message || 'Partial report could not be generated.' });
+          }
+        } else {
+          return sendJson(req, res, 404, { error: 'Result file not available yet.' });
+        }
+      }
       res.writeHead(200, securityHeaders(req, {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Length': stat.size,
@@ -520,7 +576,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`MX Preflight v2.3 running at http://localhost:${port}`);
+  console.log(`MX Preflight v2.6.2 running at http://localhost:${port}`);
   console.log(`Scan queue concurrency: ${scanQueue.concurrency}`);
   console.log(`Database: ${path.join(dataDir, 'app.db')}`);
   if (db.userCount() === 0) console.log('Initial setup required: open /setup or set ADMIN_USERNAME and ADMIN_PASSWORD before starting.');
